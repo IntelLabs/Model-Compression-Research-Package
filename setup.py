@@ -28,7 +28,7 @@ setup(name='model_compression_research',
       author_email='ofir.zafrir@intel.com',
       python_requires='>=3.6.*',
       packages=find_packages(
-          exclude=['tests.*', 'tests', 'examples', 'examples.*']),
+          exclude=['tests.*', 'tests', 'examples', 'examples.*', 'research', 'research.*']),
       install_requires=install_requirements,
       include_package_data=True,
       )
