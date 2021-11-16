@@ -1,0 +1,9 @@
+{
+  "not_to_prune": ["classifier", "teacher"],
+  "prune_layer_types": {
+    "Linear": {"name": "weight"},
+    "QuantizedLinear": {"name": "weight"}
+  },
+  "pruning_fn": "pattern_lock",
+  "scheduler": "one_shot"
+}

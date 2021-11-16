@@ -1,0 +1,9 @@
+{
+    "quantization_begin": 0,
+    "not_to_requantize_output": [
+        "output.dense",
+        "value",
+        "qa_outputs"
+    ],
+    "not_to_quantize": ["teacher"]
+}

@@ -1,0 +1,23 @@
+{
+  "begin_pruning_step": 0,
+  "end_pruning_step": 80000,
+  "init_strategy": "uniform",
+  "not_to_prune": [
+    "cls",
+    "teacher"
+  ],
+  "policy_begin_step": 0,
+  "policy_end_step": 50000,
+  "prune_layer_types": {
+    "Linear": {
+      "name": "weight"
+    }
+  },
+  "pruning_fn": "unstructured_magnitude",
+  "pruning_fn_default_kwargs": {
+    "initial_sparsity": 0.0,
+    "target_sparsity": 0.85
+  },
+  "pruning_frequency": 1000,
+  "scheduler": "iterative"
+}

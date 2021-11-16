@@ -1,0 +1,14 @@
+{
+  "begin_pruning_step": 1400,
+  "end_pruning_step": 12000,
+  "not_to_prune": ["qa_outputs", "pooler", "teacher"],
+  "policy_begin_step": 1400,
+  "policy_end_step": 10000,
+  "prune_layer_types": {
+    "Linear": {"name": "weight"}
+  },
+  "pruning_fn": "unstructured_magnitude",
+  "pruning_fn_default_kwargs": {"target_sparsity": 0.85},
+  "pruning_frequency": 100,
+  "scheduler": "iterative"
+}
