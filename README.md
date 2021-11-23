@@ -13,6 +13,7 @@ git clone https://github.com/IntelLabs/Model-Compression-Research-Package
 cd Model-Compression-Research-Package
 pip install [-e] .
 ```
+Add `-e` flag to install an editable version of the library.
 
 ## Quick Tour
 This package contains implementations of several weight pruning methods, knowledge distillation and quantization-aware training.
@@ -141,9 +142,15 @@ Methods from the following papers were implemented in this package and are ready
 * [Discovering Neural Wirings](https://arxiv.org/abs/1906.00586)
 * [Q8BERT: Quantized 8Bit BERT](https://arxiv.org/abs/1910.06188)
 * [Distilling the Knowledge in a Neural Network](https://arxiv.org/abs/1503.02531)
-* [Prune Once for All: Sparse Pre-Trained Language Models]()
+* [Prune Once for All: Sparse Pre-Trained Language Models](https://arxiv.org/abs/2111.05754)
 
 ## Citation
 If you want to cite our paper and library, you can use the following:
 ```bibtex
+@article{zafrir2021prune,
+  title={Prune Once for All: Sparse Pre-Trained Language Models},
+  author={Zafrir, Ofir and Larey, Ariel and Boudoukh, Guy and Shen, Haihao and Wasserblat, Moshe},
+  journal={arXiv preprint arXiv:2111.05754},
+  year={2021}
+}
 ```
