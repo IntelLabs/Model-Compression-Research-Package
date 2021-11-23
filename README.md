@@ -154,3 +154,14 @@ If you want to cite our paper and library, you can use the following:
   year={2021}
 }
 ```
+```bibtex
+@software{zafrir_ofir_2021_5721732,
+  author       = {Zafrir, Ofir},
+  title        = {Model-Compression-Research-Package by Intel Labs},
+  month        = nov,
+  year         = 2021,
+  publisher    = {Zenodo},
+  version      = {v0.1.0},
+  doi          = {10.5281/zenodo.5721732},
+  url          = {https://doi.org/10.5281/zenodo.5721732}
+}

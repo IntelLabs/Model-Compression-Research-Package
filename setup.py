@@ -16,7 +16,7 @@ with open('requirements.txt') as fp:
 with open('README.md', encoding='utf8') as fp:
     long_desc = fp.read()
 
-version = "0.1.0.dev0"
+version = "0.1.0"
 
 setup(name='model_compression_research',
       version=version,
