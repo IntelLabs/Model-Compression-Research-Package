@@ -16,7 +16,7 @@
   "pruning_fn": "unstructured_magnitude",
   "pruning_fn_default_kwargs": {
     "initial_sparsity": 0.0,
-    "target_sparsity": 0.85
+    "target_sparsity": 0.9
   },
   "pruning_frequency": 1000,
   "scheduler": "iterative"
