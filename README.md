@@ -143,6 +143,7 @@ Methods from the following papers were implemented in this package and are ready
 * [Q8BERT: Quantized 8Bit BERT](https://arxiv.org/abs/1910.06188)
 * [Distilling the Knowledge in a Neural Network](https://arxiv.org/abs/1503.02531)
 * [Prune Once for All: Sparse Pre-Trained Language Models](https://arxiv.org/abs/2111.05754)
+* [Dynamic-TinyBERT: Boost TinyBERT's Inference Efficiency by Dynamic Sequence Length](https://arxiv.org/abs/2111.09645)
 
 ## Citation
 If you want to cite our paper and library, you can use the following:
