@@ -158,12 +158,12 @@ The results are saved in a CSV format.
 
 
 
-## Results
+## Paper Results on SQuAD1.1
 
 | Model                         | Max F1 (full model) | Best Speedup within BERT-1\% |
 |-------------------------------|:----------:|:-----------------:|
 | BERT-base |   88.5   |    1x    |
 | DistilBERT  |   85.8   |    -    |
 | TinyBERT |    87.5   |    2x    |
-| [Dynamic-TinyBERT](https://huggingface.co/Intel/dynamic_tinybert) |    3.3x    |
+| [Dynamic-TinyBERT](https://huggingface.co/Intel/dynamic_tinybert) |    **88.71**   |   **3.3x**    |
 
