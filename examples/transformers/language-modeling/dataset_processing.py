@@ -196,7 +196,7 @@ def segment_pair_nsp_process(datasets, tokenizer, args, text_column_name='text')
         return {'input_ids': sequences}
 
     max_seq_length = calc_max_seq_length(tokenizer, args)
-    max_seq_length = max_seq_length - \
+    max_seq_length_wo_special = max_seq_length - \
         tokenizer.num_special_tokens_to_add(pair=True)
     # rng = random.Random(args.dataset_seed)
     # Datasets hashing goes wrong when args object is passed into the processing
@@ -216,15 +216,15 @@ def segment_pair_nsp_process(datasets, tokenizer, args, text_column_name='text')
         next_sentence_label = []
         for doc_index, document in enumerate(docs):
             # We *usually* want to fill up the entire sequence since we are padding
-            # to `max_seq_length` anyways, so short sequences are generally wasted
+            # to `max_seq_length_wo_special` anyways, so short sequences are generally wasted
             # computation. However, we *sometimes*
             # (i.e., short_seq_prob == 0.1 == 10% of the time) want to use shorter
             # sequences to minimize the mismatch between pre-training and fine-tuning.
             # The `target_seq_length` is just a rough target however, whereas
-            # `max_seq_length` is a hard limit.
-            target_seq_length = max_seq_length
+            # `max_seq_length_wo_special` is a hard limit.
+            target_seq_length = max_seq_length_wo_special
             if rng.random() < short_seq_probability:
-                target_seq_length = rng.randint(2, max_seq_length)
+                target_seq_length = rng.randint(2, max_seq_length_wo_special)
 
             # We DON'T just concatenate all of the tokens from a document into a long
             # sequence and choose an arbitrary split point because this would make the
@@ -354,7 +354,7 @@ def doc_sentences_process(datasets, tokenizer, args, text_column_name='text'):
         return {'input_ids': sequences}
 
     max_seq_length = calc_max_seq_length(tokenizer, args)
-    max_seq_length = max_seq_length - \
+    max_seq_length_wo_special = max_seq_length - \
         tokenizer.num_special_tokens_to_add(pair=False)
 
     def concatenate_sentences(example):
@@ -370,7 +370,7 @@ def doc_sentences_process(datasets, tokenizer, args, text_column_name='text'):
                 segment = [tokenizer.sep_token_id] + segment
             current_chunk.extend(segment)
             current_length += len(segment)
-            if current_chunk and i == len(document) - 1 or current_length + len(document[i + 1]) >= max_seq_length:
+            if current_chunk and i == len(document) - 1 or current_length + len(document[i + 1]) >= max_seq_length_wo_special:
                 assert len(current_chunk) >= 1
                 docs.append(current_chunk)
                 current_chunk = []
@@ -507,7 +507,7 @@ def _data_process_inner(tokenizer, args, text_column_name='text'):
             [data[split] for data in data_list]) for split in data_list[0]}
     )
     # Process dataset
-    if args.data_process_type in ['bert', 'doc_sentences']:
+    if args.data_process_type in ['segment_pair_nsp', 'doc_sentences']:
         nltk.download('punkt')
     proc_datasets = PROCESS_TYPE[args.data_process_type](
         merged_data, tokenizer, args, text_column_name)
