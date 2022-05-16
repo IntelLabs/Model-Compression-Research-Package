@@ -63,7 +63,7 @@ for e in range(training_args.epochs):
 pruning_scheduler.remove_pruning()
 ```
 
-For using knowledge distillation with [`HuggingFace/transformers`](https://github.com/huggingface/transformers) dedicated transformers [`Trainer`](https://huggingface.co/transformers/main_classes/trainer.html) see the implementation of `HFTrainerPruningCallback` in [`api_utils.py`](model_compression_research/api_utils.py).
+For using weight pruning with [`HuggingFace/transformers`](https://github.com/huggingface/transformers) dedicated transformers [`Trainer`](https://huggingface.co/transformers/main_classes/trainer.html) see the implementation of `HFTrainerPruningCallback` in [`api_utils.py`](model_compression_research/api_utils.py).
 
 ### Knowledge Distillation
 Model distillation is a method to distill the knowledge learned by a teacher to a smaller student model.
