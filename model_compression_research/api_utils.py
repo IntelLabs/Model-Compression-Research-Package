@@ -79,12 +79,13 @@ def get_linear_rewinding_schedule_with_warmup(optimizer, num_warmup_steps, num_t
         prune_interval = prune_end_step - prune_start_step
         train_wo_pruning_steps = num_training_steps - prune_interval
         if current_step < num_warmup_steps:
-            return float(current_step) / float(max(1, num_warmup_steps))
+            return float(current_step) / float(max(1., num_warmup_steps))
         if current_step >= prune_start_step and current_step < prune_end_step:
             rewind = (current_step -
                       prune_start_step) // rewind_interval * rewind_interval
-            return max(0.0, float(train_wo_pruning_steps - current_step + rewind) / float(max(1, train_wo_pruning_steps - num_warmup_steps)))
-        return max(0.0, float(num_training_steps - current_step) / float(max(1, train_wo_pruning_steps - num_warmup_steps)))
+            return max(0., float(train_wo_pruning_steps - current_step + rewind) / float(max(1, train_wo_pruning_steps - num_warmup_steps)))
+        b = prune_interval if current_step < prune_start_step else 0.
+        return max(0., float(num_training_steps - b - current_step) / float(max(1, train_wo_pruning_steps - num_warmup_steps)))
 
     return torch.optim.lr_scheduler.LambdaLR(optimizer, pruning_lr_lambda, last_epoch)
 
