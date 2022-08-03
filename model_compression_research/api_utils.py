@@ -9,6 +9,7 @@ import json
 import logging
 from functools import wraps
 from argparse import Action
+import inspect
 
 import torch
 from torch import nn
@@ -333,6 +334,13 @@ try:
         teacher_convert_parameters=True,
     ):
         """Add model distillation from teacher to HuggingFace/transformers model"""
+        teacher_sig = inspect.signature(teacher.forward)
+        student_sig = inspect.signature(student.forward)
+        teacher_unique = set(teacher_sig.parameters) - \
+            set(student_sig.parameters)
+        student_unique = set(student_sig.parameters) - \
+            set(teacher_sig.parameters)
+
         teacher = HFTeacherWrapper(
             teacher,
             ce_alpha=teacher_ce_alpha,
@@ -354,14 +362,22 @@ try:
                     kwargs.update(output_hidden_states=True)
                 if teacher_attention_alpha is not None:
                     kwargs.update(output_attentions=True)
-            student_output = student._forward(*args, **kwargs)
+            student_kwargs = {k: kwargs[k]
+                              for k in kwargs if k not in teacher_unique}
+            student_output = student._forward(*args, **student_kwargs)
             if student.training:
-                student._teacher(*args, **kwargs)
+                teacher_kwargs = {k: kwargs[k]
+                                  for k in kwargs if k not in student_unique}
+                student._teacher(*args, **teacher_kwargs)
                 loss = student_output["loss"] * student_alpha
                 loss += student._teacher.compute_distill_loss(
                     student_output)
                 student_output["loss"] = loss
             return student_output
+
+        new_sig = student_sig.replace(parameters=list(inspect.signature(
+            student.forward.__func__).parameters.values()) + [teacher_sig.parameters[k] for k in teacher_unique])
+        forward.__signature__ = new_sig
 
         student.forward = forward.__get__(student)
         return student

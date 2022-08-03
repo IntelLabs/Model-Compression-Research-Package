@@ -590,6 +590,9 @@ def main():
 
         if distill_args.distill:
             hf_remove_teacher_from_student(trainer.model)
+            # There might have been a change in the forward signature of the model
+            # This hack will reset the signature saved in the trainer
+            trainer._signature_columns = None
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         trainer.log_metrics("train", metrics)
