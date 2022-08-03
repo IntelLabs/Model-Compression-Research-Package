@@ -43,7 +43,7 @@ class UniformNeuralWiringPruningMethod(UniformMagnitudePruningMethod):
         return MaskFilledSTE.apply(original, mask)
 
 
-def unstructured_neural_wiring_pruning(module, name='weight', target_sparsity=0., initial_sparsity=0., threshold_decay=0.):
+def unstructured_neural_wiring_pruning(module, name='weight', target_sparsity=0., initial_sparsity=0., threshold_decay=0., fast_threshold=False):
     """Apply neural wiring pruning method to module"""
     try:
         method = module.get_pruning_parameters('method', name=name)
@@ -56,11 +56,12 @@ def unstructured_neural_wiring_pruning(module, name='weight', target_sparsity=0.
             target_sparsity=target_sparsity,
             initial_sparsity=initial_sparsity,
             threshold_decay=threshold_decay,
+            fast_threshold=fast_threshold,
         )
     return module, method
 
 
-def block_structured_neural_wiring_pruning(module, name='weight', target_sparsity=0., initial_sparsity=0., threshold_decay=0., block_dims=1, pooling_type='avg'):
+def block_structured_neural_wiring_pruning(module, name='weight', target_sparsity=0., initial_sparsity=0., threshold_decay=0., block_dims=1, pooling_type='avg', fast_threshold=False):
     """Apply block neural wiring pruning method to module"""
     try:
         method = module.get_pruning_parameters('method', name=name)
@@ -75,6 +76,7 @@ def block_structured_neural_wiring_pruning(module, name='weight', target_sparsit
             threshold_decay=threshold_decay,
             block_dims=block_dims,
             pooling_type=pooling_type,
+            fast_threshold=fast_threshold,
         )
     return module, method
 

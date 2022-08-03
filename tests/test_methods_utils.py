@@ -5,7 +5,7 @@
 """
 Testing utils
 """
-import unittest
+from absl.testing import parameterized
 
 import torch
 
@@ -15,7 +15,7 @@ from model_compression_research.pruning.methods.methods_utils import (
 )
 
 
-class TestMaskFilledSTE(unittest.TestCase):
+class TestMaskFilledSTE(parameterized.TestCase):
     def test_forward(self):
         device = torch.device('cpu')
         if torch.cuda.is_available():
@@ -51,21 +51,22 @@ class TestMaskFilledSTE(unittest.TestCase):
             ~mask, 0.).sum(1, keepdim=True).t().expand_as(i)).all())
 
 
-class TestCalcPruningThreshold(unittest.TestCase):
+class TestCalcPruningThreshold(parameterized.TestCase):
     def setUp(self):
         self.tensor = torch.tensor([
             [11, 17, 53, 54],
             [15, 26, 37, 88],
             [24, 33, 82, 21],
             [48, 37, 26, 85],
-        ])
+        ]).float()
 
-    def test_simple_case(self):
-        thresh = calc_pruning_threshold(self.tensor, 0.75)
+    @parameterized.parameters([False, True])
+    def test_simple_case(self, fast):
+        thresh = calc_pruning_threshold(self.tensor, 0.75, fast=fast)
         self.assertEqual(thresh, 53)
-        thresh = calc_pruning_threshold(self.tensor, 0.)
-        self.assertEqual(thresh, 0.)
-        thresh = calc_pruning_threshold(self.tensor, 0.75, 22, 0.5)
+        thresh = calc_pruning_threshold(self.tensor, 0., fast=fast)
+        self.assertEqual(thresh, 10.)
+        thresh = calc_pruning_threshold(self.tensor, 0.75, 22, 0.5, fast=fast)
         self.assertEqual(thresh, 53 * 0.5 + 22 * 0.5)
 
     def test_block_case(self):
@@ -79,7 +80,7 @@ class TestCalcPruningThreshold(unittest.TestCase):
         ground_truth = torch.tensor([53, 37, 33, 48])
         self.assertTrue((thresh == ground_truth).all())
         thresh = calc_pruning_threshold(self.tensor, 0., block_size=4)
-        self.assertTrue(thresh == 0.)
+        self.assertTrue(thresh == 10.)
         current = torch.tensor([5, 10, 13, 18])
         thresh = calc_pruning_threshold(
             self.tensor, 0.75, current_threshold=current, threshold_decay=0.6, block_size=4)
@@ -92,7 +93,7 @@ class TestCalcPruningThreshold(unittest.TestCase):
         thresh = calc_pruning_threshold(tensor, 0.75)
         self.assertEqual(thresh, 53)
         thresh = calc_pruning_threshold(self.tensor, 0.)
-        self.assertEqual(thresh, 0.)
+        self.assertEqual(thresh, 10.)
         thresh = calc_pruning_threshold(self.tensor, 0.75, 22, 0.5)
         self.assertEqual(thresh, 53 * 0.5 + 22 * 0.5)
 
@@ -104,4 +105,4 @@ class TestCalcPruningThreshold(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    parameterized.unittest.main()
