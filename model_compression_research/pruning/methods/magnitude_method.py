@@ -6,15 +6,13 @@
 Unstructured magnitude based pruning method
 """
 from collections import defaultdict
-from collections.abc import Iterable
 import weakref
-from itertools import chain
 
 import torch
 from torch.nn import functional as F
 
 from .method import PruningMethod
-from .methods_utils import calc_pruning_threshold
+from .methods_utils import calc_pruning_threshold, handle_block_pruning_dims
 from ..registry import register_method
 
 
@@ -26,13 +24,14 @@ BLOCK_POOLING_FN_LUT = {'max': F.max_pool2d,
 class UnstructuredMagnitudePruningMethod(PruningMethod):
     """Unstructured magnitude pruning"""
 
-    def _init(self, target_sparsity=0., initial_sparsity=0., threshold_decay=0.):
+    def _init(self, target_sparsity=0., initial_sparsity=0., threshold_decay=0., fast_threshold=False):
         self.register_name('original')
         self.register_name('mask')
         self.target_sparsity = target_sparsity
         self.initial_sparsity = initial_sparsity
         self._current_sparsity = initial_sparsity
         self.threshold_decay = threshold_decay
+        self.fast_threshold = fast_threshold
         self._threshold = 0.
         original = getattr(self.module, self.name)
         delattr(self.module, self.name)
@@ -44,7 +43,7 @@ class UnstructuredMagnitudePruningMethod(PruningMethod):
     def _update_threshold(self, tensor):
         "Updates the pruning threshold"
         self._threshold = calc_pruning_threshold(
-            tensor, self._current_sparsity, self._threshold, self.threshold_decay)
+            tensor, self._current_sparsity, self._threshold, self.threshold_decay, fast=self.fast_threshold)
 
     @torch.no_grad()
     def _compute_mask(self):
@@ -104,29 +103,17 @@ class UniformMagnitudePruningMethod(UnstructuredMagnitudePruningMethod):
 class BlockStructuredMagnitudePruningMethod(UnstructuredMagnitudePruningMethod):
     """Block magnitude pruning"""
 
-    def _init(self, target_sparsity=0., initial_sparsity=0., threshold_decay=0., block_dims=1, pooling_type='avg'):
+    def _init(self, target_sparsity=0., initial_sparsity=0., threshold_decay=0., block_dims=1, pooling_type='avg', fast_threshold=False):
         self.block_dims = block_dims
         self.pooling_type = pooling_type
-        super()._init(target_sparsity, initial_sparsity, threshold_decay)
+        super()._init(target_sparsity, initial_sparsity, threshold_decay, fast_threshold)
         # Handle block dims
-        original_dims = len(
-            getattr(self.module, self.get_name('original')).size())
-        if original_dims > 2:
+        original = getattr(self.module, self.get_name('original'))
+        if original.dim() > 2:
             raise NotImplementedError(
-                "Currently works only for 2D weights, {}D weight was given".format(original_dims))
-        if not isinstance(self.block_dims, Iterable):
-            self.block_dims = original_dims * (self.block_dims, )
-        self.block_dims = tuple(self.block_dims)
-        if original_dims < len(self.block_dims):
-            raise ValueError("Block number of dimensions {} can't be higher than the number of the weight's dimension {}".format(
-                len(self.block_dims), original_dims))
-        if len(self.block_dims) < original_dims:
-            # Extend block dimensions with ones to match the number of dimensions of the pruned tensor
-            self.block_dims = (
-                original_dims - len(self.block_dims)) * (1, ) + self.block_dims
-        # # pytorch transposes the input and output channels
-        self.block_dims = (
-            self.block_dims[1], self.block_dims[0]) + self.block_dims[2:]
+                "Currently works only for 2D weights, {}D weight was given".format(original.dim()))
+        self.block_dims, self.expanded_shape, self.pooled_shape = handle_block_pruning_dims(
+            block_dims, original.shape)
         # Handle pooling function
         if isinstance(self.pooling_type, str):
             self.pooling_type = BLOCK_POOLING_FN_LUT[self.pooling_type]
@@ -140,16 +127,12 @@ class BlockStructuredMagnitudePruningMethod(UnstructuredMagnitudePruningMethod):
         # calculate new threshold
         original = self.get_parameters('original').abs()
         # pooling weight
-        extanded_shape = tuple(chain.from_iterable(
-            [[d // b, b] for d, b in zip(original.shape, self.block_dims)]))
-        pooled_shape = tuple(chain.from_iterable(
-            [[d // b, 1] for d, b in zip(original.shape, self.block_dims)]))
         pooled_weight = self.pooling_type(
             original.unsqueeze(0), self.block_dims, self.block_dims).squeeze()
         self._update_threshold(pooled_weight)
         # compute mask according new threshold and expand
-        new_mask = (pooled_weight > self._threshold).to(original.dtype).reshape(pooled_shape).expand(
-            extanded_shape).reshape_as(original)
+        new_mask = (pooled_weight > self._threshold).to(original.dtype).reshape(self.pooled_shape).expand(
+            self.expanded_shape).reshape_as(original)
         self.set_parameter('mask', new_mask)
 
     def extra_repr(self):
@@ -330,7 +313,7 @@ class GlobalUnstructuredMagnitudePruningMethod(GroupedUnstructuredMagnitudePruni
         super().update_group_sparsity('global', sparsity_schedule=sparsity_schedule)
 
 
-def unstructured_magnitude_pruning(module, name='weight', target_sparsity=0., initial_sparsity=0., threshold_decay=0.):
+def unstructured_magnitude_pruning(module, name='weight', target_sparsity=0., initial_sparsity=0., threshold_decay=0., fast_threshold=False):
     """Apply magnitude pruning method to module"""
     try:
         method = module.get_pruning_parameters('method', name=name)
@@ -342,7 +325,9 @@ def unstructured_magnitude_pruning(module, name='weight', target_sparsity=0., in
             name,
             target_sparsity=target_sparsity,
             initial_sparsity=initial_sparsity,
-            threshold_decay=threshold_decay)
+            threshold_decay=threshold_decay,
+            fast_threshold=fast_threshold,
+        )
     return module, method
 
 
@@ -358,11 +343,12 @@ def uniform_magnitude_pruning(module, name='weight', target_sparsity=0., initial
             name,
             target_sparsity=target_sparsity,
             initial_sparsity=initial_sparsity,
-            block_size=block_size)
+            block_size=block_size,
+        )
     return module, method
 
 
-def block_structured_magnitude_pruning(module, name='weight', target_sparsity=0., initial_sparsity=0., threshold_decay=0., block_dims=1, pooling_type='avg'):
+def block_structured_magnitude_pruning(module, name='weight', target_sparsity=0., initial_sparsity=0., threshold_decay=0., block_dims=1, pooling_type='avg', fast_threshold=False):
     """Apply block magnitude pruning method to module"""
     try:
         method = module.get_pruning_parameters('method', name=name)
@@ -377,6 +363,7 @@ def block_structured_magnitude_pruning(module, name='weight', target_sparsity=0.
             threshold_decay=threshold_decay,
             block_dims=block_dims,
             pooling_type=pooling_type,
+            fast_threshold=fast_threshold,
         )
     return module, method
 
