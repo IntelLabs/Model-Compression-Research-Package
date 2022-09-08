@@ -489,6 +489,10 @@ class RobertaEncoder(nn.Module):
     def forward(
         self,
         hidden_states,
+        restored_hidden_states,
+        remain_indices,
+        all_cross_attentions = (),
+        all_self_attentions = (),
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
@@ -511,8 +515,6 @@ class RobertaEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states, )
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
