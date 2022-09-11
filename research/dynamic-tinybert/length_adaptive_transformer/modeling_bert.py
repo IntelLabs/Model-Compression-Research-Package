@@ -145,10 +145,6 @@ class BertEncoder(nn.Module):
     def forward(
         self,
         hidden_states,
-        restored_hidden_states,
-        remain_indices,
-        all_hidden_states = (),
-        all_attentions = (),
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
@@ -166,8 +162,11 @@ class BertEncoder(nn.Module):
             restored_hidden_states = hidden_states
             remain_indices = torch.arange(tsz, device=hidden_states.device).unsqueeze(0).repeat(bsz, 1)
 
+        all_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states, )
+
         for i, layer_module in enumerate(self.layer):
             if layer_config is not None and i not in layer_config:
                 continue
@@ -217,6 +216,9 @@ class BertEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if output_attentions:
+                if all_attentions is None:
+                    all_attentions = ()
+                    
                 all_attentions = all_attentions + (layer_outputs[1],)
 
         last_hidden_state = restored_hidden_states if length_config is not None else hidden_states
