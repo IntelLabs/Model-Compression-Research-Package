@@ -1,5 +1,5 @@
 {
-  "not_to_prune": ["qa_outputs", "pooler", "teacher"],
+  "not_to_prune": ["qa_outputs", "pooler", "teacher", "vocab"],
   "prune_layer_types": {
     "Linear": {"name": "weight"},
     "QuantizedLinear": {"name": "weight"}

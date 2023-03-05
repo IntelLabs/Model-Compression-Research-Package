@@ -3,15 +3,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Data processing utils for run_mlm.py script
+Data processing utils for run_mlm.py, run_clm.py scripts
 """
 import logging
 import random
 import os
-
-import nltk
+import functools
 
 import datasets
+import transformers
 
 from detokenizer import wikitext_detokenizer
 
@@ -19,22 +19,22 @@ logger = logging.getLogger(__name__)
 
 
 def calc_max_seq_length(tokenizer, args):
-    if args.max_seq_length is None:
-        max_seq_length = tokenizer.model_max_length
-        if max_seq_length > 1024:
+    if args.block_size is None:
+        block_size = tokenizer.model_max_length
+        if block_size > 1024:
             logger.warning(
                 f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                "Picking 1024 instead. You can change that default value by passing --max_seq_length xxx."
+                "Picking 1024 instead. You can change that default value by passing --block_size xxx."
             )
-            max_seq_length = 1024
+            block_size = 1024
     else:
-        if args.max_seq_length > tokenizer.model_max_length:
+        if args.block_size > tokenizer.model_max_length:
             logger.warning(
-                f"The max_seq_length passed ({args.max_seq_length}) is larger than the maximum length for the"
-                f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
+                f"The max_seq_length passed ({args.block_size}) is larger than the maximum length for the"
+                f"model ({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
             )
-        max_seq_length = min(args.max_seq_length, tokenizer.model_max_length)
-    return max_seq_length
+        block_size = min(args.block_size, tokenizer.model_max_length)
+    return block_size
 
 
 def line_by_line_process(datasets, tokenizer, args, text_column_name='text'):
@@ -67,14 +67,23 @@ def line_by_line_process(datasets, tokenizer, args, text_column_name='text'):
     return tokenized_dataset
 
 
-def concatenate_process(datasets, tokenizer, args, text_column_name='text'):
+def concatenate_process(datasets, tokenizer, args, text_column_name='text', add_labels=False):
     # We use `return_special_tokens_mask=True` because DataCollatorForLanguageModeling (see below) is more
     # efficient when it receives the `special_tokens_mask`.
     # TODO fix implementation, need to take into account special tokens
-    raise NotImplementedError("Need to fix implementation")
 
+    tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_utils_base")
+    
     def tokenize_function(examples):
-        return tokenizer(examples[text_column_name], return_special_tokens_mask=True)
+        with transformers.testing_utils.CaptureLogger(tok_logger) as cl:
+            output = tokenizer(examples[text_column_name])
+        # clm input could be much much longer than block_size
+        if "Token indices sequence length is longer than the" in cl.out:
+            tok_logger.warning(
+                "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits"
+                " before being passed to the model."
+            )
+        return output
 
     tokenized_dataset = datasets.map(
         tokenize_function,
@@ -82,6 +91,7 @@ def concatenate_process(datasets, tokenizer, args, text_column_name='text'):
         num_proc=args.preprocessing_num_workers,
         remove_columns=[text_column_name],
         load_from_cache_file=not args.overwrite_cache,
+        desc="Running tokenizer on dataset",
     )
 
     max_seq_length = calc_max_seq_length(tokenizer, args)
@@ -102,6 +112,8 @@ def concatenate_process(datasets, tokenizer, args, text_column_name='text'):
                 for i in range(0, total_length, max_seq_length)]
             for k, t in concatenated_examples.items()
         }
+        if add_labels:
+            result["labels"] = result["input_ids"].copy()
         return result
 
     tokenized_dataset = tokenized_dataset.map(
@@ -109,6 +121,7 @@ def concatenate_process(datasets, tokenizer, args, text_column_name='text'):
         batched=True,
         num_proc=args.preprocessing_num_workers,
         load_from_cache_file=not args.overwrite_cache,
+        desc=f"Grouping texts in chunks of {max_seq_length}",
     )
 
     return tokenized_dataset
@@ -182,6 +195,62 @@ def wikipedia_preprocess(datasets, args):
         load_from_cache_file=not args.overwrite_cache,
         desc="Wikipedia: segmenting articles"
     )
+    return proc_datasets
+
+def openwebtext_preprocess(datasets, args):
+    pass
+    # Imports
+    from bs4 import BeautifulSoup
+    from unidecode import unidecode
+    """
+    Step 1: extract text only out of html.
+    Return text cleaned from html tags and entities
+    """
+    def html_cleaning_func(example):
+        soup_example = BeautifulSoup(example['text'], 'lxml')
+        example["text"] = soup_example.get_text()
+        return example
+
+    proc_datasets = datasets.map(
+        html_cleaning_func,
+        # remove_columns=column_names,
+        num_proc=args.preprocessing_num_workers,
+        load_from_cache_file=not args.overwrite_cache,
+        desc="Clean html from dataset",
+        )
+    
+    """ Step 2: Unicode encoding translation """
+    def unicode_clean_func(example):
+        example["text"] = unidecode(example['text'])
+        return example
+    
+    proc_datasets = proc_datasets.map(
+        unicode_clean_func,
+        # remove_columns=column_names,
+        num_proc=args.preprocessing_num_workers,
+        load_from_cache_file=not args.overwrite_cache,
+        desc="Clean unicode from dataset",
+        )
+/nfs/site/home/iamit/store/code/gpt2/updated-compression-dir/Model-Compression-Research-Package/examples/transformers/language-modeling/dataset_processing.py
+    """ step 3: Eliminate high ratio of non-text/no context documents """
+    exclude_idx = []
+    def al_num_punct_char(c):
+        return c.isalnum() or c==' ' or c=='.' or c==',' or c==':' or c=='-'
+
+    def al_num_punct_clean(example, idx):
+        max_threshold=0.9
+        if sum(map(al_num_punct_char, example['text'])) < max_threshold*len(example['text']):
+            exclude_idx.append(idx)
+
+    proc_datasets = proc_datasets.map(
+        al_num_punct_clean,
+        # batched=True,
+        # remove_columns=column_names,
+        num_proc=args.preprocessing_num_workers,
+        load_from_cache_file=not args.overwrite_cache,
+        with_indices=True,
+        desc="Eliminate unfit documents from dataset",
+        )
     return proc_datasets
 
 
@@ -441,7 +510,8 @@ def doc_sentences_process(datasets, tokenizer, args, text_column_name='text'):
 
 
 PROCESS_TYPE = {
-    "concatenate": concatenate_process,
+    "concatenate": functools.partial(concatenate_process, add_labels=False),
+    "concatenate_clm": functools.partial(concatenate_process, add_labels=True),
     "line_by_line": line_by_line_process,
     "doc_sentences": doc_sentences_process,
     "segment_pair_nsp": segment_pair_nsp_process,
@@ -452,6 +522,7 @@ DATASET_SPECIFIC_PREPROCESS = {
     "wikitext": wikitext_preprocess,
     "wikipedia": wikipedia_preprocess,
     "bookcorpusopen": bookcorpusopen_preprocess,
+    # "openwebtext" : openwebtext_preprocess
 }
 
 
@@ -459,20 +530,17 @@ def load_dataset(name, config, args):
     dataset = datasets.load_dataset(
         name,
         config,
-        keep_in_memory=args.keep_in_memory,
     )
     if "validation" not in dataset.keys():
         dataset["validation"] = datasets.load_dataset(
             name,
             config,
             split=f"train[:{args.validation_split_percentage}%]",
-            keep_in_memory=args.keep_in_memory,
         )
         dataset["train"] = datasets.load_dataset(
             name,
             config,
             split=f"train[{args.validation_split_percentage}%:]",
-            keep_in_memory=args.keep_in_memory,
         )
     return dataset
 
@@ -508,6 +576,7 @@ def _data_process_inner(tokenizer, args, text_column_name='text'):
     )
     # Process dataset
     if args.data_process_type in ['segment_pair_nsp', 'doc_sentences']:
+        import nltk
         nltk.download('punkt')
     proc_datasets = PROCESS_TYPE[args.data_process_type](
         merged_data, tokenizer, args, text_column_name)
@@ -521,7 +590,8 @@ def _data_process_inner(tokenizer, args, text_column_name='text'):
     return proc_datasets
 
 
-def data_process(tokenizer, args, text_column_name='text'):
+def data_process(tokenizer, args, text_column_name='text', is_world_process_zero=True):
+    logger.setLevel(logging.INFO if is_world_process_zero else logging.WARN)
     if args.dataset_cache_directory is not None and not args.overwrite_cache:
         try:
             logger.info("Loading processed data from {}".format(
@@ -530,9 +600,9 @@ def data_process(tokenizer, args, text_column_name='text'):
                 args.dataset_cache_directory)
             logger.info("Loaded processed data from disk successfully.")
         except FileNotFoundError:
-            if os.path.exists(args.dataset_cache_directory):
-                raise FileNotFoundError(
-                    f"Path {args.dataset_cache_directory} exists, but no dataset found.")
+            # if os.path.exists(args.dataset_cache_directory):
+            #     raise FileNotFoundError(
+            #         f"Path {args.dataset_cache_directory} exists, but no dataset found.")
             proc_datasets = _data_process_inner(
                 tokenizer, args, text_column_name)
     else:

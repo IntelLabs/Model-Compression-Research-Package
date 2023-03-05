@@ -29,6 +29,8 @@ class IterativePruningConfig(PruningConfig):
             "end_pruning_step": -1,
             "policy_begin_step": 0,
             "policy_end_step": 1000,
+            "scheduler": "iterative",
+            "exponent": 3.,
         }
     )
 
@@ -65,7 +67,8 @@ class IterativePruningScheduler(PruningScheduler):
         t = self.global_step
         t_0 = self.config.policy_begin_step
         t_1 = self.config.policy_end_step
-        base = min(max((1 - (t - t_0) / (t_1 - t_0)) ** 3, 0.), 1.)
+        exp = self.config.exponent
+        base = min(max((1 - (t - t_0) / (t_1 - t_0)) ** exp, 0.), 1.)
         return 1 - base
 
     def _is_pruning_step(self):

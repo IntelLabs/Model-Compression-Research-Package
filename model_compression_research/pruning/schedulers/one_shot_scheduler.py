@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 
 class OneShotPruningConfig(PruningConfig):
     """Iterative pruning scheduler configuration object"""
+    ATTRIBUTES = PruningConfig.add_attributes(
+        {
+            "scheduler": "one_shot"
+        }
+    )
 
 
 @register_scheduler('one_shot')

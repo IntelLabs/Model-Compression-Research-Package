@@ -10,6 +10,7 @@ import logging
 from functools import wraps
 from argparse import Action
 import inspect
+import math
 
 import torch
 from torch import nn
@@ -74,7 +75,7 @@ def pruning_scheduler_factory(model, config, *args, **kwargs):
     return registry.get_scheduler_class(config.scheduler)(model, config)
 
 
-def get_linear_rewinding_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, prune_start_step, prune_end_step, rewind_interval, last_epoch=-1):
+def get_linear_rewinding_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, prune_start_step, prune_end_step, rewind_interval, slope_factor=1., last_epoch=-1):
     """Return linear decay schedule with warmup with learning rate rewinding"""
     def pruning_lr_lambda(current_step: int):
         prune_interval = prune_end_step - prune_start_step
@@ -84,9 +85,28 @@ def get_linear_rewinding_schedule_with_warmup(optimizer, num_warmup_steps, num_t
         if current_step >= prune_start_step and current_step < prune_end_step:
             rewind = (current_step -
                       prune_start_step) // rewind_interval * rewind_interval
-            return max(0., float(train_wo_pruning_steps - current_step + rewind) / float(max(1, train_wo_pruning_steps - num_warmup_steps)))
+            return max(0., float(train_wo_pruning_steps - current_step  + rewind) / float(max(1, train_wo_pruning_steps - num_warmup_steps))) * slope_factor - (slope_factor - 1)
         b = prune_interval if current_step < prune_start_step else 0.
         return max(0., float(num_training_steps - b - current_step) / float(max(1, train_wo_pruning_steps - num_warmup_steps)))
+
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, pruning_lr_lambda, last_epoch)
+
+
+def get_cosine_rewinding_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, prune_start_step, prune_end_step, rewind_interval, num_cycles=0.5, last_epoch=-1):
+    """Return linear decay schedule with warmup with learning rate rewinding"""
+    def pruning_lr_lambda(current_step: int):
+        prune_interval = prune_end_step - prune_start_step
+        train_wo_pruning_steps = num_training_steps - prune_interval
+        if current_step < num_warmup_steps:
+            return float(current_step) / float(max(1., num_warmup_steps))
+        if current_step >=num_warmup_steps and current_step < prune_start_step:
+            return max(0., float(num_training_steps - prune_interval - current_step) / float(max(1, train_wo_pruning_steps - num_warmup_steps)))
+        if current_step >= prune_start_step and current_step < prune_end_step:
+            rewind = (current_step -
+                      prune_start_step) // rewind_interval * rewind_interval
+            return max(0., float(train_wo_pruning_steps - current_step  + rewind) / float(max(1, train_wo_pruning_steps - num_warmup_steps)))
+        progress = float(current_step - prune_end_step) / float(max(1, num_training_steps - prune_end_step))
+        return max(0.0, 0.5 * (train_wo_pruning_steps - prune_start_step) / (train_wo_pruning_steps - num_warmup_steps) * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress)))
 
     return torch.optim.lr_scheduler.LambdaLR(optimizer, pruning_lr_lambda, last_epoch)
 
@@ -95,6 +115,7 @@ def get_linear_rewinding_schedule_with_warmup(optimizer, num_warmup_steps, num_t
 def quantized_model_class_factory(cls, config):
     """Construct a qunatized model class from existing model class and cofig"""
     class QuantizedModelClass(cls):
+        @wraps(cls.__init__)
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             Quantizer(self, config).quantize()
