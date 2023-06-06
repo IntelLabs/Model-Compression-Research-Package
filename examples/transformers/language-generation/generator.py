@@ -160,21 +160,25 @@ class GenerationModelWrapper(nn.Module, transformers.GenerationMixin):
                 f'Setting pad token to "{self.tokenizer.pad_token}"')
         # Load KV cache
         logger.debug('Loading cache config')
-        self.cache_config = utils.CacheConfig.from_pretrained(model_path)
         # TODO: Use config to take the correct main input name
         self.main_input_name = main_input_name
-        self.generation_state = {}
+        self.generation_state = {
+            "eos_token_id": self.tokenizer.eos_token_id,
+            "pad_token_id": self.tokenizer.pad_token_id,
+        }
         self.update_generation_state(generation_state)
         self.device = torch.device(device) if type(device) == str else device
         self.prefix_sequence_lengths = prefix_sequence_lengths if prefix_sequence_lengths is not None else DEFAULT_PREFIX_LIST
-        if self.model_mode == 'jit':
-            self.warmup(self.prefix_sequence_lengths)
         try:
             self.streamer = transformers.TextStreamer(
                 self.tokenizer, skip_prompt=True, skip_special_tokens=True)
         except AttributeError:
             self.streamer = None
-        self._reorder_cache_fn = getattr(transformers, self.config.architectures[0])._reorder_cache
+        self._reorder_cache_fn = transformers.dynamic_module_utils.get_class_from_dynamic_module(
+            self.config.auto_map['AutoModelForCausalLM'], model_path)
+        if self.model_mode == 'jit':
+            self.cache_config = utils.CacheConfig.from_pretrained(model_path)
+            self.warmup(self.prefix_sequence_lengths)
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs):
         if attention_mask is None:
@@ -207,7 +211,7 @@ class GenerationModelWrapper(nn.Module, transformers.GenerationMixin):
             if past_key_values is None:
                 past_key_values = self.dummy_past_key_values(
                     0, input_ids.size(0))
-            if input_ids.size(-1) + past_key_values[0][0].size(-2) != attention_mask.size(-1):
+            if input_ids.size(-1) + past_key_values[0][1].size(-2) != attention_mask.size(-1):
                 model_inputs['input_ids'] = model_inputs['input_ids'][:,
                                                                       past_key_values[0][0].shape[-2]:]
             model_inputs['past_key_values'] = past_key_values
@@ -298,7 +302,8 @@ class GenerationModelWrapper(nn.Module, transformers.GenerationMixin):
         times = []
         generated_tokens = []
         decoded_generated_tokens = []
-        num_beams = (self.generation_state | generation_kwargs).get('num_beams', 1)
+        num_beams = (self.generation_state |
+                     generation_kwargs).get('num_beams', 1)
         with torch.cpu.amp.autocast(enabled=True):
             with utils.Timer() as global_timer:
                 # model_input, lengths_list = self.tokenize(text, return_sequences=True)
@@ -311,7 +316,7 @@ class GenerationModelWrapper(nn.Module, transformers.GenerationMixin):
                         super().generate(
                             **model_input,
                             **(self.generation_state | generation_kwargs),
-                            streamer=self.streamer if print_generated and stream  and num_beams == 1 else None,
+                            streamer=self.streamer if print_generated and stream and num_beams == 1 else None,
                         )
                     )[0][input_length:].tolist()
                 elif self.model_mode == 'hf':
@@ -319,7 +324,7 @@ class GenerationModelWrapper(nn.Module, transformers.GenerationMixin):
                         self.model.generate(
                             **model_input,
                             **(self.generation_state | generation_kwargs),
-                            streamer=self.streamer if print_generated and stream  and num_beams == 1 else None,
+                            streamer=self.streamer if print_generated and stream and num_beams == 1 else None,
                         )
                     )[0][input_length:].tolist()
                 else:

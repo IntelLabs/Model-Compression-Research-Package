@@ -23,9 +23,12 @@ VERBOSE = False
 
 DEFAULT_GENERATION_STATE = {
     'max_new_tokens': 128,
-    'do_sample': False,
-    'temperature': 1.,
+    'do_sample': True,
+    'temperature': 0.1,
     'num_beams': 1,
+    'top_p': 1.0,
+    'top_k': 0,
+    'repetition_penalty': 1.1,
 }
 
 
@@ -111,6 +114,12 @@ def main():
         '--max_new_tokens', type=int, default=None, help='The number of max new tokens to generate')
     generation_parser.add_argument(
         '--num_beams', default=None, type=int, help='Perform beam search with #num_beams')
+    generation_parser.add_argument('--top_p', type=float, default=None,
+                                   help='If < 1.0, only keep the top tokens with cumulative probability >= top_p')
+    generation_parser.add_argument('--top_k', type=int, default=None,
+                                   help='The size of the candidate set that is used to re-rank for contrastive search')
+    generation_parser.add_argument('--repetition_penalty', type=float, default=None,
+                                   help='The parameter for repetition penalty. 1.0 means no penalty. See [this paper](https://arxiv.org/pdf/1909.05858.pdf) for more details')
 
     args, gen_string = parser.parse_known_args()
     generation_args = generation_parser.parse_args(gen_string)
