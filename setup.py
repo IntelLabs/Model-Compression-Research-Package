@@ -26,7 +26,7 @@ setup(name='model_compression_research',
       license="Apache",
       author='Ofir Zafrir',
       author_email='ofir.zafrir@intel.com',
-      python_requires='>=3.6.*',
+      python_requires='>=3.6',
       packages=find_packages(
           exclude=['tests.*', 'tests', 'examples', 'examples.*', 'research', 'research.*']),
       install_requires=install_requirements,
