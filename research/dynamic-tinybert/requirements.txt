@@ -1,5 +1,5 @@
 torch
-transformers==4.30.0
+transformers
 torchprofile
 tensorboardx
 sigopt
