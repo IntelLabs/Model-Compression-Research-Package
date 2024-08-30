@@ -212,7 +212,6 @@ try:
         """Distillation teacher wrapper adjusted to work with HuggingFace/transformers"""
 
         def __init__(self, *args, **kwargs):
-            dtype = next(args[0].parameters()).dtype
             logit_names = kwargs.pop('logit_names')
             self.weight = kwargs.pop('ce_weight', None)
             self.hidden_alpha = kwargs.pop('hidden_alpha', None)
@@ -225,12 +224,6 @@ try:
                 self.weight = torch.ones(
                     len(self.logit_names)) / len(self.logit_names)
             self._input = None
-            # Teacher hack, model will look for a tensor to determine dtype because
-            # there are no parameters in the model. So we add a single parameter
-            # to help the model determine dtype
-            for m in self.teacher.children():
-                m.dtype_parameter_hack = nn.Parameter(
-                    torch.tensor([1], dtype=dtype))
             if self.hidden_alpha is not None:
                 def similarity_loss_fn_factory():
                     similarity_loss_fn = lambda *args: getattr(
@@ -277,8 +270,8 @@ try:
             if self.ce_alpha != 0:
                 ce_loss = 0
                 for logit_name, weight in zip(self.logit_names, self.weight):
-                    student_logit = student_outputs[logit_name]
-                    teacher_logit = teacher_outputs[logit_name]
+                    student_logit = student_outputs.get(logit_name)
+                    teacher_logit = teacher_outputs.get(logit_name)
                     # preprocess LM logits, we consider each token as an example and average the loss over all tokens
                     vocab_size = self.teacher.config.vocab_size
                     if len(teacher_logit.size()) > 2 and teacher_logit.size()[-1] == vocab_size:
@@ -295,10 +288,10 @@ try:
             for key, alpha_dict in zip(['hidden_states', 'attentions'], [self.hidden_alpha, self.attention_alpha]):
                 if alpha_dict is not None:
                     cosine_loss = 0
-                    for i in range(len(student_outputs[key])):
+                    for i in range(len(student_outputs.get(key))):
                         if alpha_dict[i] != 0:
-                            teacher_state = teacher_outputs[key][i]
-                            student_state = student_outputs[key][i]
+                            teacher_state = teacher_outputs.get(key)[i]
+                            student_state = student_outputs.get(key)[i]
                             assert teacher_state.size() == student_state.size()
                             hidden_size = teacher_state.size(-1)
                             if key == 'hidden_states':
@@ -369,10 +362,10 @@ try:
                 teacher_kwargs = {k: kwargs[k]
                                   for k in kwargs if k not in student_unique}
                 student._teacher(*args, **teacher_kwargs)
-                loss = student_output["loss"] * student_alpha
+                loss = student_output.loss * student_alpha
                 loss += student._teacher.compute_distill_loss(
                     student_output)
-                student_output["loss"] = loss
+                student_output.loss = loss
             return student_output
 
         new_sig = student_sig.replace(parameters=list(inspect.signature(
